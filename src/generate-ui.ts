@@ -20,7 +20,7 @@
  */
 
 import { toFunctionSelector } from "viem";
-import type { AbiItem, AbiParam, VerifiedBundle } from "./fetch.ts";
+import type { AbiItem, AbiParam, MethodDoc, NatSpec, VerifiedBundle } from "./fetch.ts";
 
 export interface GenerateOptions {
     readonly moduleName: string;           // e.g. "Generated.Views.Erc20"
@@ -46,8 +46,8 @@ export function generateUiModule(
         renderDecodePortMsg(fns),
         renderView(reads, writes),
         renderFieldDefs(fns),
-        renderReadViews(reads),
-        renderWriteViews(writes),
+        renderReadViews(reads, bundle.natspec),
+        renderWriteViews(writes, bundle.natspec),
         renderResultParsers(reads, fns),
     ].join("\n\n\n");
 }
@@ -90,12 +90,22 @@ function functionKey(fn: AbiItem, index: number, all: AbiItem[]): string {
     return `${name}_${ownIndex}`;
 }
 
+/**
+ * Elm identifier rules: must start with a letter (`camel` lowercase, `pascal`
+ * uppercase). Solidity permits leading underscores (Compound's
+ * `_setComptroller`, `_acceptAdmin`, …); strip them so the generated Elm
+ * compiles, while keeping the original name in the user-facing label.
+ */
 function camel(s: string): string {
-    return s.length === 0 ? s : s[0]!.toLowerCase() + s.slice(1);
+    const stripped = s.replace(/^_+/, "");
+    if (stripped.length === 0) return "fn";
+    return stripped[0]!.toLowerCase() + stripped.slice(1);
 }
 
 function pascal(s: string): string {
-    return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
+    const stripped = s.replace(/^_+/, "");
+    if (stripped.length === 0) return "Fn";
+    return stripped[0]!.toUpperCase() + stripped.slice(1);
 }
 
 function ensureParamName(p: AbiParam, i: number): string {
@@ -193,7 +203,7 @@ function renderModelType(fns: AbiItem[]): string {
         } else if (isWrite(fn)) {
             fields.push(`${camel(key)}_tx : Tx.Status`);
             if (isPayable(fn)) {
-                fields.push(`${camel(key)}_value : String`);
+                fields.push(`${camel(key)}_msgValue : String`);
             }
         }
     });
@@ -230,7 +240,7 @@ function renderInit(fns: AbiItem[]): string {
         } else if (isWrite(fn)) {
             fields.push(`${camel(key)}_tx = Tx.Idle`);
             if (isPayable(fn)) {
-                fields.push(`${camel(key)}_value = ""`);
+                fields.push(`${camel(key)}_msgValue = ""`);
             }
         }
     });
@@ -275,7 +285,7 @@ function renderMsgType(fns: AbiItem[]): string {
             variants.push(`${ctor}Result (Result String String)`);
         } else if (isWrite(fn)) {
             if (isPayable(fn)) {
-                variants.push(`${ctor}ValueChanged String`);
+                variants.push(`${ctor}MsgValueChanged String`);
             }
             variants.push(`${ctor}Send`);
             variants.push(`${ctor}TxMsg Tx.Msg`);
@@ -397,8 +407,8 @@ update _ Noop model =
             if (isPayable(fn)) {
                 branches.push(
                     [
-                        `        ${ctor}ValueChanged v ->`,
-                        `            ( { model | ${camel(key)}_value = v }, NoIntent )`,
+                        `        ${ctor}MsgValueChanged v ->`,
+                        `            ( { model | ${camel(key)}_msgValue = v }, NoIntent )`,
                     ].join("\n"),
                 );
             }
@@ -408,7 +418,7 @@ update _ Noop model =
                       `                            (Send.payableCallRaw`,
                       `                                { contract = contract`,
                       `                                , data = Calldata.calldata "${selector}" slots`,
-                      `                                , value = BigInt.fromString model.${camel(key)}_value |> Maybe.withDefault BigInt.zero`,
+                      `                                , value = BigInt.fromString model.${camel(key)}_msgValue |> Maybe.withDefault BigInt.zero`,
                       `                                }`,
                       `                            )`,
                   ].join("\n")
@@ -628,7 +638,7 @@ function fieldExpr(p: AbiParam, displayName: string): string {
 // Read views
 // ---------------------------------------------------------------------------
 
-function renderReadViews(reads: AbiItem[]): string {
+function renderReadViews(reads: AbiItem[], natspec: NatSpec): string {
     if (reads.length === 0) return `-- (no read functions)`;
     const blocks = reads.map((fn) => {
         const idx = reads.indexOf(fn);
@@ -655,17 +665,21 @@ function renderReadViews(reads: AbiItem[]): string {
                   ].join("\n");
 
         const returnLabel = renderReturnLabel(fn);
+        const docBlock = renderDocBlock(fn, natspec, "readView");
 
         return `readView_${camel(key)} : Model -> Html Msg
 readView_${camel(key)} model =
-    Read.view []
-        { name = "${fn.name}"
-        , solType = "${returnLabel}"
-${argsBody}
-        , status = model.${camel(key)}_status
-        , onRead = ${pascal(key)}Read
-        , readLabel = "Read"
-        }`;
+    Html.div [ Attr.class "generated-card" ]
+        [${docBlock}
+        Read.view []
+            { name = "${fn.name}"
+            , solType = "${returnLabel}"
+${argsBody.replace(/^ {8}/gm, "            ")}
+            , status = model.${camel(key)}_status
+            , onRead = ${pascal(key)}Read
+            , readLabel = "Read"
+            }
+        ]`;
     });
     return `-- READ VIEWS -----------------------------------------------------------------\n\n\n${blocks.join("\n\n\n")}`;
 }
@@ -682,7 +696,7 @@ function renderReturnLabel(fn: AbiItem): string {
 // Write views
 // ---------------------------------------------------------------------------
 
-function renderWriteViews(writes: AbiItem[]): string {
+function renderWriteViews(writes: AbiItem[], natspec: NatSpec): string {
     if (writes.length === 0) return `-- (no write functions)`;
     const blocks = writes.map((fn) => {
         const idx = writes.indexOf(fn);
@@ -712,8 +726,8 @@ function renderWriteViews(writes: AbiItem[]): string {
             ? [
                   `        , payable =`,
                   `            Just`,
-                  `                { value = model.${camel(key)}_value`,
-                  `                , onValueChange = ${pascal(key)}ValueChanged`,
+                  `                { value = model.${camel(key)}_msgValue`,
+                  `                , onValueChange = ${pascal(key)}MsgValueChanged`,
                   `                , valid = True`,
                   `                }`,
               ].join("\n")
@@ -721,21 +735,68 @@ function renderWriteViews(writes: AbiItem[]): string {
 
         const label = pascal(fn.name ?? key);
         const pendingLabel = `${label}…`;
+        const docBlock = renderDocBlock(fn, natspec, "writeView");
 
         return `writeView_${camel(key)} : T.Address -> Maybe String -> Model -> Html Msg
 writeView_${camel(key)} _ explorerUrl model =
-    Write.view []
-        { name = "${fn.name}"
-${argsBody}
-${payableBody}
-        , txStatus = model.${camel(key)}_tx
-        , onSend = ${pascal(key)}Send
-        , sendLabel = "${label}"
-        , pendingLabel = "${pendingLabel}"
-        , explorerUrl = explorerUrl
-        }`;
+    Html.div [ Attr.class "generated-card" ]
+        [${docBlock}
+        Write.view []
+            { name = "${fn.name}"
+${argsBody.replace(/^ {8}/gm, "            ")}
+${payableBody.replace(/^ {8}/gm, "            ")}
+            , txStatus = model.${camel(key)}_tx
+            , onSend = ${pascal(key)}Send
+            , sendLabel = "${label}"
+            , pendingLabel = "${pendingLabel}"
+            , explorerUrl = explorerUrl
+            }
+        ]`;
     });
     return `-- WRITE VIEWS ----------------------------------------------------------------\n\n\n${blocks.join("\n\n\n")}`;
+}
+
+
+/**
+ * Render the NatSpec doc block above a function's form, if any.
+ *
+ * Looks up the function's canonical signature in the bundle's NatSpec, then
+ * emits a small Elm `Html.div` carrying:
+ *   - `@notice` as the primary description (user-facing)
+ *   - `@dev` as a secondary "developer" note
+ *   - `@param` notes inline next to argument labels (TODO — Phase 3)
+ *   - `@return` as a returns-note line
+ *
+ * Returns an empty string (no block) if NatSpec is absent for this function,
+ * so contracts compiled without docs degrade silently.
+ */
+function renderDocBlock(
+    fn: AbiItem,
+    natspec: NatSpec,
+    _viewKind: "readView" | "writeView",
+): string {
+    const sig = methodSignature(fn);
+    const doc: MethodDoc | undefined = natspec.methods[sig];
+    if (!doc) return ` `; // single space inside the [ — Elm tolerates empty list
+    const lines: string[] = [];
+    if (doc.notice) {
+        lines.push(`Html.p [ Attr.class "generated-card__notice" ] [ Html.text ${elmString(doc.notice)} ]`);
+    }
+    if (doc.details && doc.details !== doc.notice) {
+        lines.push(`Html.p [ Attr.class "generated-card__details" ] [ Html.text ${elmString(doc.details)} ]`);
+    }
+    if (typeof doc.returns === "string") {
+        lines.push(`Html.p [ Attr.class "generated-card__returns" ] [ Html.text ("returns: " ++ ${elmString(doc.returns)}) ]`);
+    }
+    if (lines.length === 0) return ` `;
+    return `\n        Html.div [ Attr.class "generated-card__doc" ]\n            [ ${lines.join("\n            , ")}\n            ]\n        ,`;
+}
+
+function elmString(s: string): string {
+    return `"${s
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, "\\n")}"`;
 }
 
 

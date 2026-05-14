@@ -1,6 +1,6 @@
 {
     "name": "@intrepidshape/dapp-gen",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Pull a verified contract from any EVM chain and generate a type-safe Elm dapp frontend — zero JS runtime deps, pure-Elm ABI encoding.",
     "keywords": [
         "ethereum",
@@ -39,6 +39,7 @@
     },
     "devDependencies": {
         "@types/bun": "latest",
+        "playwright": "^1.60.0",
         "typescript": "^5.0.0",
         "viem": "^2.48.11"
     }

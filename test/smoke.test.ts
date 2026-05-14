@@ -23,7 +23,7 @@
  */
 
 import { test, expect } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fetchVerified } from "../src/fetch.ts";
 import { resolveChain } from "../src/chains.ts";

@@ -1,137 +1,1304 @@
-/* Generated dapp baseline styles — replace freely.
-   The semantic class names come from `intrepidshape/elm-web3-ui`. */
+/* ============================================================================
+   Generated dapp — default stylesheet.
+
+   Design system: shadcn/ui's semantic-token taxonomy, with values drawn
+   from Radix Colors' `mauveDark` neutral scale (OKLCH). Override the
+   tokens in `:root` to retheme; the rest of the stylesheet keys off them.
+
+   Typography: Geist Sans for prose, Geist Mono for addresses / hashes /
+   numerics. Both with `tabular-nums` enforced on `.fi-num` (every fetched
+   read result auto-gets this class).
+
+   Class names follow the BEM convention from `intrepidshape/elm-web3-ui`
+   — selectors are stable; consumers replace this file freely.
+
+   References (Q4 2025–Q1 2026 patterns):
+   - shadcn token taxonomy:        https://ui.shadcn.com/docs/theming
+   - Radix Colors (OKLCH):         https://www.radix-ui.com/colors
+   - Geist font:                   https://vercel.com/font/sans
+   - Hyperliquid info density:     https://hyperliquid.xyz
+   - Linear motion restraint:      https://linear.app/blog
+   ========================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500;600;700&display=swap");
 
 :root {
-    --bg: #0e0e10;
-    --surface: #18181b;
-    --ink: #ffffff;
-    --muted: #a1a1aa;
-    --accent: #84cc16;
-    --danger: #ef4444;
-    --border: rgba(255, 255, 255, 0.08);
-    --radius: 6px;
+    /* ─── Semantic tokens (shadcn taxonomy, dark-default) ──────────────── */
+
+    --background: oklch(13% 0.005 286);   /* near-black, slight cool tint  */
+    --foreground: oklch(98% 0.002 286);   /* near-white                    */
+
+    --surface:    oklch(17% 0.005 286);   /* one step up from background   */
+    --surface-2:  oklch(21% 0.006 286);   /* hover / pressed / focus       */
+
+    --muted:      oklch(68% 0.012 286);   /* secondary text, labels        */
+    --muted-2:    oklch(55% 0.010 286);   /* type annotations, captions    */
+
+    --border:     oklch(25% 0.006 286);   /* hairline dividers             */
+    --border-strong: oklch(35% 0.008 286);
+
+    --accent:     oklch(80% 0.20 130);    /* lime — primary CTA            */
+    --accent-fg:  oklch(13% 0.005 286);   /* ink on accent                 */
+    --accent-soft: oklch(80% 0.20 130 / 0.12);
+
+    /* Status — OKLCH for perceptual uniformity, NOT pure red/green */
+    --pending:    oklch(75% 0.15 75);     /* amber                         */
+    --pending-soft: oklch(75% 0.15 75 / 0.14);
+    --success:    oklch(78% 0.18 145);    /* lime-green                    */
+    --success-soft: oklch(78% 0.18 145 / 0.14);
+    --danger:     oklch(65% 0.22 25);     /* coral, not #FF0000            */
+    --danger-soft: oklch(65% 0.22 25 / 0.14);
+
+    --ring: oklch(80% 0.20 130 / 0.45);   /* focus ring (accent @ 45%)     */
+
+    --radius:     6px;
+    --radius-sm:  4px;
+    --radius-lg:  10px;
+
+    --shadow-sm: 0 1px 0 oklch(0% 0 0 / 0.4);
+
+    --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", "Fira Code", monospace;
 }
 
-* { box-sizing: border-box; }
-body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--ink);
-    font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
-    font-size: 14px;
-    line-height: 1.45;
+/* ─── Base ──────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+    box-sizing: border-box;
 }
-.app { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Force tabular numerals everywhere numbers appear — addresses, balances,
+   hashes, decimals. This single rule is the single biggest separator
+   between professional and amateur dapp UI. */
+.fi-num,
+.web3-contract-read__result,
+.web3-contract-write__error,
+.web3-tx-badge,
+.web3-input-bigint,
+.web3-input-address,
+.web3-input-bytes,
+.web3-balance,
+.web3-address {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+button:disabled {
+    cursor: not-allowed;
+}
+
+/* ─── App shell ─────────────────────────────────────────────────────────── */
+
+.app {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px 96px;
+}
+
 .app__header {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
+    align-items: center;
     gap: 16px;
-    padding-bottom: 20px;
+    padding: 8px 0 20px;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
+    margin-bottom: 32px;
 }
-.app__title { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
-.app__address { color: var(--muted); font-size: 12px; }
+
+.app__title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.app__address {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 4px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+/* Wallet pill sits at the right edge of the header */
+.web3-wallet,
+.web3-wallet-state {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ─── Generated view — read / write grids ───────────────────────────────── */
+
+.generated-view {
+    display: grid;
+    gap: 32px;
+}
 
 .generated-view__section {
-    margin-top: 24px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 12px;
 }
+
+.generated-view__section--reads::before {
+    content: "Read";
+    grid-column: 1 / -1;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+.generated-view__section--writes::before {
+    content: "Write";
+    grid-column: 1 / -1;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+/* ─── Read / Write cards ────────────────────────────────────────────────── */
+
+/* ─── Read / Write cards ────────────────────────────────────────────────── */
 
 .web3-contract-read,
 .web3-contract-write {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 16px;
+    padding: 16px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 150ms ease-out;
 }
+
+/* ─── NatSpec doc block — sits INSIDE the function card ─────────────────── *
+ *
+ * Rendered when the verified contract carries solc @notice / @dev / @return.
+ * The wrapper `.generated-card` is a thin override that:
+ *   - removes the inner Read.view chrome (we re-host the chrome on `.generated-card`)
+ *   - lets the doc-block live above the form, sharing the same border + padding
+ * Cards without docs render as plain `.web3-contract-read` and look identical.
+ *
+ * Cascade-order matters here: this block must come AFTER the
+ * `.web3-contract-read` base rule above, so the override wins.
+ * --------------------------------------------------------------------- */
+
+.generated-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 150ms ease-out;
+}
+.generated-card:hover {
+    border-color: var(--border-strong);
+}
+
+/* Strip chrome from the inner Read.view / Write.view — the outer
+   .generated-card now owns the card surface. Force specificity by
+   chaining the descendant + the class. */
+.generated-card .web3-contract-read,
+.generated-card .web3-contract-write {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.generated-card__doc {
+    display: grid;
+    gap: 4px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+}
+.generated-card__notice {
+    margin: 0;
+    color: var(--foreground);
+    font-size: 13px;
+    line-height: 1.5;
+}
+/* When no @notice exists, the @dev (`__details`) IS the primary
+   description (OpenZeppelin convention). The selector below promotes
+   it to foreground styling. The :first-child rule fires whenever the
+   doc-block has no notice paragraph above it. */
+.generated-card__details {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.generated-card__doc > .generated-card__details:first-child {
+    color: var(--foreground);
+    font-size: 13px;
+}
+.generated-card__doc > .generated-card__notice + .generated-card__details {
+    color: var(--muted);
+    font-size: 11px;
+    font-style: italic;
+}
+.generated-card__returns {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted-2);
+}
+.web3-contract-read:hover,
+.web3-contract-write:hover {
+    border-color: var(--border-strong);
+}
+
 .web3-contract-read__header,
 .web3-contract-write__header {
     display: flex;
-    justify-content: space-between;
     align-items: baseline;
-    margin-bottom: 12px;
+    justify-content: space-between;
+    gap: 12px;
 }
+
 .web3-contract-read__name,
-.web3-contract-write__name { font-weight: 700; }
+.web3-contract-write__name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--foreground);
+}
+
 .web3-contract-read__return-type,
 .web3-contract-write__mutability {
-    color: var(--muted);
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted-2);
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
 }
+
 .web3-contract-read__args,
 .web3-contract-write__args {
     display: grid;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 10px;
 }
 
-.web3-abi-input { display: grid; gap: 4px; }
-.web3-abi-input__label { font-size: 12px; color: var(--muted); }
-.web3-abi-input__type { color: var(--muted); opacity: 0.6; }
-.web3-abi-input__error { color: var(--danger); font-size: 11px; }
+/* ─── AbiInput ─────────────────────────────────────────────────────────── */
+
+.web3-abi-input {
+    display: grid;
+    gap: 4px;
+}
+
+.web3-abi-input__label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+}
+.web3-abi-input__type {
+    color: var(--muted-2);
+}
+
+.web3-abi-input__error {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--danger);
+}
+
 .web3-input-address,
 .web3-input-bigint,
 .web3-input-bytes,
 .web3-input-text {
-    background: var(--bg);
+    background: var(--background);
     border: 1px solid var(--border);
-    color: var(--ink);
+    color: var(--foreground);
     padding: 8px 10px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     font: inherit;
+    font-family: var(--font-mono);
+    font-size: 12px;
     width: 100%;
+    transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+.web3-input-address:focus,
+.web3-input-bigint:focus,
+.web3-input-bytes:focus,
+.web3-input-text:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring);
 }
 .web3-input-address--invalid,
 .web3-input-bigint--invalid,
-.web3-input-bytes--invalid { border-color: var(--danger); }
+.web3-input-bytes--invalid {
+    border-color: var(--danger);
+}
+
+/* List input (T[]) */
+.web3-abi-input__list {
+    display: grid;
+    gap: 8px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border);
+}
+.web3-abi-input__list-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.web3-abi-input__list-row > .web3-abi-input {
+    flex: 1;
+}
+.web3-abi-input__list-remove,
+.web3-abi-input__list-add {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    transition: all 120ms ease-out;
+}
+.web3-abi-input__list-add:hover,
+.web3-abi-input__list-remove:hover {
+    color: var(--foreground);
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+}
+
+/* Tuple input */
+.web3-abi-input__tuple {
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+/* Bool checkbox */
+.web3-abi-input__bool {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.web3-input-bool {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    margin: 0;
+}
+.web3-abi-input__bool-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--foreground);
+}
+
+/* ─── Action buttons + tx-state morph ───────────────────────────────────── */
+
+/* The "inline button morph" pattern: the same button handles Idle →
+   Pending → Confirmed → Failed. A 2px underline animates left-to-right
+   while pending; the underline colour signals state. No modal, no toast. */
 
 .web3-contract-read__button,
 .web3-action-btn {
+    position: relative;
     background: var(--accent);
-    color: var(--bg);
+    color: var(--accent-fg);
     border: none;
-    padding: 8px 14px;
-    border-radius: 4px;
-    font: inherit;
-    font-weight: 700;
-    cursor: pointer;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: background 120ms ease-out, transform 60ms ease-out;
+    align-self: flex-start;
+    min-width: 96px;
+}
+.web3-contract-read__button:hover:not(:disabled),
+.web3-action-btn:hover:not(:disabled) {
+    background: oklch(85% 0.21 130);
+}
+.web3-contract-read__button:active:not(:disabled),
+.web3-action-btn:active:not(:disabled) {
+    transform: translateY(1px);
 }
 .web3-contract-read__button:disabled,
-.web3-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.web3-action-btn:disabled {
+    background: var(--surface-2);
+    color: var(--muted);
+}
+
+.web3-contract-read__button::after,
+.web3-action-btn::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    height: 2px;
+    background: var(--pending);
+    border-radius: 2px;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 200ms ease-out, background 120ms ease-out;
+}
+.web3-contract-read--pending .web3-contract-read__button::after,
+.web3-contract-write--pending .web3-action-btn::after {
+    transform: scaleX(1);
+    background: var(--pending);
+    animation: fi-pending-stripe 1.6s linear infinite;
+}
+.web3-contract-write--terminal .web3-action-btn::after {
+    transform: scaleX(1);
+    background: var(--success);
+}
+
+@keyframes fi-pending-stripe {
+    0%   { transform: scaleX(0); }
+    100% { transform: scaleX(1); }
+}
+
+/* ─── Result panel ──────────────────────────────────────────────────────── */
 
 .web3-contract-read__result,
-.web3-contract-write__error {
-    margin-top: 12px;
+.web3-contract-read__pending {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     padding: 8px 10px;
-    background: var(--bg);
-    border-radius: 4px;
+    font-family: var(--font-mono);
     font-size: 12px;
     overflow-wrap: anywhere;
+    word-break: break-all;
 }
-.web3-contract-read__result--failed,
-.web3-contract-write__error { color: var(--danger); }
+.web3-contract-read__result--success {
+    border-color: oklch(78% 0.18 145 / 0.4);
+    color: var(--foreground);
+}
+.web3-contract-read__result--failed {
+    border-color: oklch(65% 0.22 25 / 0.4);
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+.web3-contract-read__pending {
+    color: var(--muted);
+    font-style: italic;
+}
+
+.web3-contract-write__error {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--danger);
+    padding: 6px 10px;
+    background: var(--danger-soft);
+    border-radius: var(--radius-sm);
+}
+
+.web3-contract-write__value {
+    display: grid;
+    gap: 4px;
+}
+.web3-contract-write__value-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+}
+.web3-contract-write__value-unit {
+    color: var(--muted-2);
+}
+
+.web3-contract-write__button-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.web3-contract-write__footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+    min-height: 18px;
+}
+
+/* ─── Status badge — OKLCH stops, no pure red/green ─────────────────────── */
 
 .web3-tx-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    font-family: var(--font-mono);
     font-size: 11px;
-    background: var(--border);
+    font-weight: 500;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--muted);
 }
-.web3-tx-badge--confirmed { background: var(--accent); color: var(--bg); }
+.web3-tx-badge--idle {
+    color: var(--muted);
+}
+.web3-tx-badge--pending {
+    background: var(--pending-soft);
+    color: var(--pending);
+    border-color: oklch(75% 0.15 75 / 0.4);
+}
+.web3-tx-badge--confirmed {
+    background: var(--success-soft);
+    color: var(--success);
+    border-color: oklch(78% 0.18 145 / 0.4);
+}
 .web3-tx-badge--failed,
-.web3-tx-badge--rejected { background: var(--danger); }
+.web3-tx-badge--rejected {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: oklch(65% 0.22 25 / 0.4);
+}
 
-.web3-wallet,
-.web3-wallet-state {
-    margin-left: auto;
+/* ─── Tx hash link ──────────────────────────────────────────────────────── */
+
+.web3-tx-hash-link,
+.web3-tx-hash {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: color 100ms ease-out, background 100ms ease-out;
+}
+.web3-tx-hash-link:hover {
+    color: var(--foreground);
+    background: var(--surface-2);
+}
+
+/* ─── Tabs (multi-contract) ─────────────────────────────────────────────── */
+
+.app__multi {
+    display: grid;
+    gap: 16px;
+}
+.app__tabs {
     display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+}
+.app__tab {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    padding: 8px 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 120ms ease-out, border-color 120ms ease-out;
+}
+.app__tab:hover {
+    color: var(--foreground);
+}
+.app__tab--active {
+    color: var(--foreground);
+    border-bottom-color: var(--accent);
+}
+.app__panel {
+    display: none;
+}
+.app__panel--active {
+    display: block;
+}
+
+/* ─── Wallet UI from elm-web3-ui ────────────────────────────────────────── *
+ *
+ * The actual class names that `Web3.Ui.Wallet.viewState` / `connectButton`
+ * emit are:
+ *   .web3-wallet-state   wrapper around the whole pill cluster
+ *   .web3-connect-btn    "Connect" CTA when Disconnected / ReadOnly / Error
+ *   .web3-disconnect-btn "Disconnect" CTA when Connected / WrongChain
+ *   .web3-action-btn     "Switch to …" CTA when WrongChain
+ *   .web3-chain-badge    chain name pill (from chainBadge helper)
+ * Inside `viewState` the connected-address render is a plain <span> with no
+ * dedicated class — we style it via the wrapper-cascade below.
+ * ----------------------------------------------------------------------- */
+
+.web3-wallet-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+    padding: 4px 6px 4px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1;
+    transition: border-color 120ms ease-out;
+}
+.web3-wallet-state:hover {
+    border-color: var(--border-strong);
+}
+.web3-wallet-state > span {
+    color: var(--foreground);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.005em;
+}
+
+.web3-connect-btn {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: none;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: background 120ms ease-out, transform 60ms ease-out;
+}
+.web3-connect-btn:hover:not(:disabled) {
+    background: oklch(85% 0.21 130);
+}
+.web3-connect-btn:active:not(:disabled) {
+    transform: translateY(1px);
+}
+.web3-connect-btn:disabled {
+    background: transparent;
+    color: var(--muted);
+    cursor: progress;
+}
+
+.web3-disconnect-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 120ms ease-out;
+}
+.web3-disconnect-btn:hover {
+    color: var(--foreground);
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+}
+
+/* The "Connecting…" span when in transient state — give it a subtle
+   pulsing dot so the user knows something is happening. */
+.web3-wallet-state > span:only-child::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--pending);
+    margin-right: 8px;
+    vertical-align: 1px;
+    animation: fi-wallet-pulse 1.4s ease-in-out infinite;
+}
+@keyframes fi-wallet-pulse {
+    0%, 100% { opacity: 0.45; }
+    50%      { opacity: 1; }
+}
+
+.web3-chain-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: var(--surface-2);
+    color: var(--muted);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ─── Scrollbars: thin, themed ─────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--surface-2);
+    border-radius: 5px;
+    border: 2px solid var(--background);
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--border-strong);
+}
+
+/* ─── Security pre-flight card (Web3.Ui.SecurityCard) ───────────────────── */
+
+.web3-security-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.web3-security-card__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+}
+.web3-security-card__title {
+    font-weight: 600;
+    font-size: 13px;
+}
+.web3-security-card__subtitle {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted-2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.web3-security-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.web3-security-card__counts {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+}
+.web3-security-card__count {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 10px 8px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.web3-security-card__count-n {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.web3-security-card__count-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.web3-security-card__count--zero {
+    opacity: 0.45;
+}
+.web3-security-card__count--critical .web3-security-card__count-n,
+.web3-security-card__count--high .web3-security-card__count-n {
+    color: var(--danger);
+}
+.web3-security-card__count--medium .web3-security-card__count-n {
+    color: var(--pending);
+}
+.web3-security-card__count--low .web3-security-card__count-n {
+    color: var(--muted);
+}
+.web3-security-card__count--info .web3-security-card__count-n {
+    color: var(--muted-2);
+}
+
+.web3-security-card__findings {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.web3-security-card__findings-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.web3-security-card__findings-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.web3-security-card__finding {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    list-style: none;
+    overflow: hidden;
+}
+.web3-security-card__finding-disclosure {
+    width: 100%;
+}
+.web3-security-card__finding-disclosure > summary {
+    list-style: none;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 70px 1fr auto;
     gap: 8px;
     align-items: center;
+    padding: 6px 10px;
+    user-select: none;
+    transition: background 120ms ease-out;
+}
+.web3-security-card__finding-disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+.web3-security-card__finding-disclosure > summary::before {
+    content: "›";
+    grid-column: 1 / span 3;
+    grid-row: 1;
+    justify-self: end;
+    color: var(--muted-2);
+    font-family: var(--font-mono);
+    transition: transform 160ms ease-out;
+    transform: rotate(0deg);
+    align-self: center;
+    width: 0;
+    overflow: visible;
+    margin-right: 12px;
+    font-size: 14px;
+    line-height: 1;
+}
+.web3-security-card__finding-disclosure[open] > summary::before {
+    transform: rotate(90deg);
+}
+.web3-security-card__finding-disclosure[open] > summary {
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+}
+.web3-security-card__finding-row {
+    /* keeps the grid above identical when targeted by JS or hover */
+}
+.web3-security-card__finding-detail {
+    padding: 12px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--foreground);
+}
+.web3-security-card__finding-what {
+    margin: 0;
+    color: var(--foreground);
+}
+.web3-security-card__finding-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.web3-security-card__finding-section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    color: var(--muted);
+}
+.web3-security-card__finding-section-body {
+    margin: 0;
+    color: var(--foreground);
+}
+.web3-security-card__finding-fps {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--foreground);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.web3-security-card__finding-fps li::marker {
+    color: var(--accent);
+}
+.web3-security-card__finding-ref {
+    margin: 0;
+    font-size: 11px;
+}
+.web3-security-card__finding-ref a {
+    color: var(--accent);
+    text-decoration: none;
+}
+.web3-security-card__finding-ref a:hover {
+    text-decoration: underline;
+}
+.web3-security-card__finding-loc {
+    margin: 0;
+    font-size: 11px;
+    color: var(--muted);
+}
+.web3-security-card__finding-loc code {
+    font-family: var(--font-mono);
+    color: var(--muted);
+}
+.web3-security-card__finding-severity {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    text-align: center;
+    padding: 2px 4px;
+    border-radius: 3px;
+    letter-spacing: 0.04em;
+}
+.web3-security-card__finding-severity--critical,
+.web3-security-card__finding-severity--high {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+.web3-security-card__finding-severity--medium {
+    background: var(--pending-soft);
+    color: var(--pending);
+}
+.web3-security-card__finding-severity--low,
+.web3-security-card__finding-severity--info {
+    background: var(--surface-2);
+    color: var(--muted);
+}
+.web3-security-card__finding-title {
+    font-size: 12px;
+    color: var(--foreground);
+}
+.web3-security-card__finding-tool {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted-2);
+}
+
+.web3-security-card__tools {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+}
+.web3-security-card__tools-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted-2);
+}
+.web3-security-card__tool {
+    font-family: var(--font-mono);
+}
+
+.web3-security-card__actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+.web3-security-card__report-link {
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--font-mono);
+}
+.web3-security-card__report-link:hover {
+    color: var(--foreground);
+}
+.web3-security-card__audit-btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--foreground);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    transition: all 120ms ease-out;
+}
+.web3-security-card__audit-btn:hover {
+    border-color: var(--border-strong);
+    background: var(--surface);
+}
+.web3-security-card__audit-btn--urgent {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: oklch(15% 0.005 286);
+}
+.web3-security-card__audit-btn--urgent:hover {
+    background: oklch(72% 0.22 25);
+}
+
+.web3-security-card__stubbed {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+    font-style: italic;
+}
+
+.web3-security-card__disclaimer {
+    margin: 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted-2);
+    line-height: 1.5;
+}
+
+/* ─── Audit-pool panel ─────────────────────────────────────────────────── */
+
+.web3-audit-pool {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.web3-audit-pool__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.web3-audit-pool__title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--foreground);
+}
+
+.web3-audit-pool__subtitle {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.web3-audit-pool__subtitle--open    { color: var(--accent-cyan); border-color: var(--accent-cyan); }
+.web3-audit-pool__subtitle--funded  { color: var(--accent-lime); border-color: var(--accent-lime); }
+.web3-audit-pool__subtitle--closed  { color: var(--muted); }
+
+.web3-audit-pool__stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.web3-audit-pool__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.web3-audit-pool__stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted-2);
+}
+
+.web3-audit-pool__stat-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--foreground);
+    font-variant-numeric: tabular-nums;
+}
+
+.web3-audit-pool__progress {
+    width: 100%;
+    height: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.web3-audit-pool__progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-cyan), var(--accent-lime));
+    transition: width 240ms ease-out;
+}
+
+.web3-audit-pool__pledgers {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.web3-audit-pool__pledgers-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted-2);
+}
+
+.web3-audit-pool__pledgers-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.web3-audit-pool__pledger {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--foreground);
+}
+
+.web3-audit-pool__pledger-label {
+    font-family: var(--font-mono);
+    color: var(--muted);
+}
+
+.web3-audit-pool__pledger-amount {
+    font-variant-numeric: tabular-nums;
+    color: var(--foreground);
+}
+
+.web3-audit-pool__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.web3-audit-pool__cta {
+    appearance: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font: 600 12px var(--font-sans);
+    cursor: pointer;
+    transition: background 120ms ease-out, color 120ms ease-out;
+}
+
+.web3-audit-pool__cta--primary {
+    background: var(--foreground);
+    color: var(--background);
+    border-color: var(--foreground);
+}
+
+.web3-audit-pool__cta--primary:hover {
+    background: var(--accent-lime);
+    border-color: var(--accent-lime);
+    color: var(--background);
+}
+
+.web3-audit-pool__cta--primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.web3-audit-pool__cta--secondary {
+    background: transparent;
+    color: var(--foreground);
+}
+
+.web3-audit-pool__cta--secondary:hover {
+    background: var(--surface-2);
+}
+
+.web3-audit-pool__awaiting {
+    font-size: 12px;
+    color: var(--accent-lime);
+    font-style: italic;
+}
+
+.web3-audit-pool__disclaimer {
+    margin: 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted-2);
+    line-height: 1.5;
+}
+
+/* ─── Forge wrapper (injected by the hosted site above the dapp) ────────── */
+
+.forge-frame {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px 24px 0;
+}
+.forge-frame__banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    margin-bottom: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+}
+.forge-frame__banner a {
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 120ms ease-out;
+}
+.forge-frame__banner a:hover {
+    color: var(--foreground);
+}
+.forge-frame__brand {
+    color: var(--foreground) !important;
+    font-weight: 600;
+}
+.forge-frame__brand:hover { color: var(--accent) !important; }
+.forge-frame__sep { color: var(--muted-2); }
+
+/* ─── Selection ─────────────────────────────────────────────────────────── */
+
+::selection {
+    background: var(--accent-soft);
+    color: var(--foreground);
 }

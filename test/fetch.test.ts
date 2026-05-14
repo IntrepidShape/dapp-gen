@@ -34,3 +34,25 @@ test("rejects non-hex address", async () => {
 test("unknown chain slug is rejected", () => {
     expect(() => resolveChain("nonsense")).toThrow(/Unknown chain/);
 });
+
+
+// ─── Blockscout v2 path (PulseChain) ─────────────────────────────────────
+
+test.skipIf(!ONLINE)(
+    "fetches ProveX from PulseChain — Sourcify → Blockscout v2 fallback",
+    async () => {
+        const chain = resolveChain("pulsechain");
+        const bundle = await fetchVerified(
+            "0xF6f8Db0aBa00007681F8fAF16A0FDa1c9B030b11",
+            chain,
+            { cacheDir: "/tmp/dapp-gen-test-cache-blockscout", timeoutMs: 25000 },
+        );
+        expect(bundle.chainId).toBe(369);
+        expect(bundle.contractName.toLowerCase()).toContain("prov");
+        expect(bundle.abi.length).toBeGreaterThan(5);
+        expect(Object.keys(bundle.sources).length).toBeGreaterThan(0);
+        // Verification quality is reported correctly
+        expect(["full", "partial", "etherscan"]).toContain(bundle.matchKind);
+    },
+    40000,
+);

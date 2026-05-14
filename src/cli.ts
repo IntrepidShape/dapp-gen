@@ -190,11 +190,14 @@ async function main(): Promise<void> {
     console.log(`Next:`);
     console.log(`  cd ${outDir}`);
     console.log(`  elm make src/Main.elm --output=elm.js`);
-    console.log(`  bun --hot index.html\n`);
+    console.log(`  bun serve.ts        # builds ports.ts + serves on :5174`);
+    console.log(`\nThen open the URL in a browser with an EIP-1193 wallet.\n`);
     console.log(
-        `All calldata encoding happens in Elm — the bundled ports.ts is a pure`,
+        `All calldata encoding happens in Elm — the generated ports.ts is a`,
     );
-    console.log(`pass-through with no runtime dependencies.`);
+    console.log(
+        `pure pass-through with zero runtime npm dependencies.`,
+    );
 }
 
 interface ScaffoldBundle {
@@ -286,6 +289,8 @@ function renderTemplates(
     const copies: Array<{ template: string; out: string }> = [
         { template: "index.html", out: "index.html" },
         { template: "ports.ts", out: "ports.ts" },
+        { template: "elm-web3-ports.ts", out: "elm-web3-ports.ts" },
+        { template: "serve.ts", out: "serve.ts" },
         { template: "style.css", out: "style.css" },
     ];
 

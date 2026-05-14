@@ -31,6 +31,31 @@ export interface VerifiedBundle {
     readonly compilerVersion: string;
     readonly sources: Record<string, string>;  // path → solidity source
     readonly matchKind: "full" | "partial" | "etherscan";
+    readonly natspec: NatSpec;
+}
+
+/**
+ * Solidity NatSpec, lifted from the verified `metadata.json`. The compiler
+ * emits two parallel documents:
+ *   - `userdoc` carries `@notice` per method + contract-level `@notice`.
+ *   - `devdoc` carries `@dev` (`details`), `@param`, `@return`, `@title`,
+ *     `@author` per method + contract-level.
+ *
+ * Method keys are canonical signatures (e.g. `balanceOf(address)`).
+ */
+export interface NatSpec {
+    readonly contractNotice?: string | undefined;
+    readonly contractDetails?: string | undefined;
+    readonly contractTitle?: string | undefined;
+    readonly contractAuthor?: string | undefined;
+    readonly methods: Record<string, MethodDoc>;
+}
+
+export interface MethodDoc {
+    readonly notice?: string | undefined;
+    readonly details?: string | undefined;
+    readonly params?: Record<string, string> | undefined;
+    readonly returns?: string | Record<string, string> | undefined;
 }
 
 export interface AbiItem {
@@ -64,6 +89,20 @@ const ETHERSCAN_ENDPOINTS: Record<number, string> = {
     943: "https://api.scan.v4.testnet.pulsechain.com/api",
 };
 
+/**
+ * Blockscout v2 API endpoints. Returns far richer data than the
+ * Etherscan-compat shim — ABI as native JSON, structured source files,
+ * verification quality flags (full vs partial vs via-sourcify),
+ * compiler settings, decoded constructor args.
+ *
+ * Used as the SECOND-tier source after Sourcify, BEFORE Etherscan-compat.
+ * Only populated for chains where the explorer is a Blockscout fork.
+ */
+const BLOCKSCOUT_V2_ENDPOINTS: Record<number, string> = {
+    369: "https://api.scan.pulsechain.com/api/v2",
+    943: "https://api.scan.v4.testnet.pulsechain.com/api/v2",
+};
+
 export interface FetchOptions {
     readonly cacheDir?: string;
     readonly etherscanApiKey?: string;
@@ -89,24 +128,48 @@ export async function fetchVerified(
     }
 
     let bundle: VerifiedBundle;
+    const errors: Error[] = [];
+
+    // Try Sourcify (canonical, vendor-neutral).
     try {
         bundle = await fetchFromSourcify(addr, chain.chainId, options.timeoutMs);
-    } catch (sourcifyErr) {
-        try {
-            bundle = await fetchFromEtherscan(
-                addr,
-                chain.chainId,
-                options.etherscanApiKey,
-                options.timeoutMs,
-            );
-        } catch (etherscanErr) {
-            // Surface the more useful of the two errors.
-            if (isNotVerified(sourcifyErr) && isNotVerified(etherscanErr)) {
-                throw new Error(
-                    `not-verified: ${addr} on chain ${chain.chainId} has no verified source on Sourcify or Etherscan`,
+    } catch (e) {
+        errors.push(e as Error);
+
+        // Try Blockscout v2 if the chain has one (much richer than
+        // Etherscan-compat — native ABI, structured sources).
+        if (BLOCKSCOUT_V2_ENDPOINTS[chain.chainId]) {
+            try {
+                bundle = await fetchFromBlockscoutV2(
+                    addr,
+                    chain.chainId,
+                    options.timeoutMs,
                 );
+            } catch (b) {
+                errors.push(b as Error);
+                bundle = undefined as unknown as VerifiedBundle;
             }
-            throw sourcifyErr;
+        }
+
+        // If still not resolved, try Etherscan-compat as last fallback.
+        if (!bundle!) {
+            try {
+                bundle = await fetchFromEtherscan(
+                    addr,
+                    chain.chainId,
+                    options.etherscanApiKey,
+                    options.timeoutMs,
+                );
+            } catch (e2) {
+                errors.push(e2 as Error);
+                if (errors.every(isNotVerified)) {
+                    throw new Error(
+                        `not-verified: ${addr} on chain ${chain.chainId} has no verified source on Sourcify, Blockscout, or Etherscan`,
+                    );
+                }
+                // Surface the most informative error
+                throw errors[0]!;
+            }
         }
     }
 
@@ -155,7 +218,24 @@ async function fetchFromSourcify(
 
     const metadata = JSON.parse(metadataFile.content) as {
         compiler?: { version?: string };
-        output?: { abi?: AbiItem[] };
+        output?: {
+            abi?: AbiItem[];
+            userdoc?: {
+                notice?: string;
+                methods?: Record<string, { notice?: string }>;
+            };
+            devdoc?: {
+                title?: string;
+                author?: string;
+                details?: string;
+                methods?: Record<string, {
+                    details?: string;
+                    params?: Record<string, string>;
+                    return?: string;
+                    returns?: Record<string, string>;
+                }>;
+            };
+        };
         settings?: {
             compilationTarget?: Record<string, string>;
         };
@@ -184,7 +264,65 @@ async function fetchFromSourcify(
         compilerVersion: metadata.compiler?.version ?? "unknown",
         sources,
         matchKind: body.status === "full" ? "full" : "partial",
+        natspec: extractNatSpec(metadata.output ?? {}),
     };
+}
+
+function extractNatSpec(output: {
+    userdoc?: {
+        notice?: string;
+        methods?: Record<string, { notice?: string }>;
+    };
+    devdoc?: {
+        title?: string;
+        author?: string;
+        details?: string;
+        methods?: Record<string, {
+            details?: string;
+            params?: Record<string, string>;
+            return?: string;
+            returns?: Record<string, string>;
+        }>;
+    };
+}): NatSpec {
+    const userMethods = output.userdoc?.methods ?? {};
+    const devMethods = output.devdoc?.methods ?? {};
+    const allKeys = new Set([
+        ...Object.keys(userMethods),
+        ...Object.keys(devMethods),
+    ]);
+
+    const methods: Record<string, MethodDoc> = {};
+    for (const sig of allKeys) {
+        const u = userMethods[sig] ?? {};
+        const d = devMethods[sig] ?? {};
+        const m: MethodDoc = {};
+        if (u.notice) (m as { notice: string }).notice = u.notice;
+        if (d.details) (m as { details: string }).details = d.details;
+        if (d.params && Object.keys(d.params).length > 0) {
+            (m as { params: Record<string, string> }).params = d.params;
+        }
+        if (d.returns && Object.keys(d.returns).length > 0) {
+            (m as { returns: Record<string, string> }).returns = d.returns;
+        } else if (d.return) {
+            (m as { returns: string }).returns = d.return;
+        }
+        methods[sig] = m;
+    }
+    const out: NatSpec = { methods };
+    if (output.userdoc?.notice) {
+        (out as { contractNotice: string }).contractNotice = output.userdoc.notice;
+    }
+    if (output.devdoc?.details) {
+        (out as { contractDetails: string }).contractDetails = output.devdoc.details;
+    }
+    if (output.devdoc?.title) {
+        (out as { contractTitle: string }).contractTitle = output.devdoc.title;
+    }
+    if (output.devdoc?.author) {
+        (out as { contractAuthor: string }).contractAuthor = output.devdoc.author;
+    }
+    return out;
 }
 
 function guessContractName(files: SourcifyFile[], addr: string): string {
@@ -256,8 +394,102 @@ async function fetchFromEtherscan(
         compilerVersion: r.CompilerVersion,
         sources,
         matchKind: "etherscan",
+        // Etherscan's getsourcecode payload doesn't carry NatSpec — only the
+        // raw source. Future enhancement: parse @notice/@dev out of the
+        // sources via a tiny Solidity comment scanner. For now: empty.
+        natspec: { methods: {} },
     };
 }
+
+// ---------------------------------------------------------------------------
+// Blockscout v2
+// ---------------------------------------------------------------------------
+
+interface BlockscoutV2SmartContract {
+    name?: string;
+    compiler_version?: string;
+    abi?: AbiItem[];
+    source_code?: string;
+    file_path?: string;
+    additional_sources?: Array<{ file_path: string; source_code: string }>;
+    is_verified?: boolean;
+    is_fully_verified?: boolean;
+    is_partially_verified?: boolean;
+    is_verified_via_sourcify?: boolean;
+    sourcify_repo_url?: string;
+}
+
+async function fetchFromBlockscoutV2(
+    addr: string,
+    chainId: number,
+    timeoutMs = 15000,
+): Promise<VerifiedBundle> {
+    const endpoint = BLOCKSCOUT_V2_ENDPOINTS[chainId];
+    if (!endpoint) {
+        throw new Error(
+            `unsupported-chain: no Blockscout v2 endpoint for chain ${chainId}`,
+        );
+    }
+
+    const url = `${endpoint}/smart-contracts/${addr}`;
+    const res = await fetchWithTimeout(url, timeoutMs);
+
+    if (res.status === 404) {
+        throw new Error(
+            `not-verified: blockscout v2 has no record for ${addr} on chain ${chainId}`,
+        );
+    }
+    if (!res.ok) {
+        throw new Error(`network: blockscout v2 returned ${res.status} for ${addr}`);
+    }
+
+    const body = (await res.json()) as BlockscoutV2SmartContract;
+
+    if (!body.is_verified) {
+        throw new Error(
+            `not-verified: blockscout v2 reports ${addr} as unverified`,
+        );
+    }
+    if (!body.abi || !Array.isArray(body.abi)) {
+        throw new Error(
+            `malformed: blockscout v2 response for ${addr} has no ABI`,
+        );
+    }
+
+    // Source files: `source_code` is the main file (or a flattened blob).
+    // `additional_sources` carries the rest of a multi-file contract.
+    const sources: Record<string, string> = {};
+    const mainPath = body.file_path || `${body.name || "main"}.sol`;
+    if (body.source_code) {
+        sources[mainPath] = body.source_code;
+    }
+    for (const extra of body.additional_sources ?? []) {
+        sources[extra.file_path] = extra.source_code;
+    }
+
+    const matchKind: VerifiedBundle["matchKind"] = body.is_fully_verified
+        ? "full"
+        : "partial";
+
+    return {
+        address: addr,
+        chainId,
+        contractName: body.name ?? guessContractName([], addr),
+        abi: body.abi,
+        compilerVersion: body.compiler_version ?? "unknown",
+        sources,
+        matchKind,
+        // Blockscout v2 doesn't expose solc's userdoc/devdoc directly.
+        // If `is_verified_via_sourcify` is true we could *re-fetch* from
+        // Sourcify just to grab the NatSpec, but that defeats the point
+        // of the fallback. Leave empty; NatSpec degrades gracefully.
+        natspec: { methods: {} },
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Etherscan-compat fallback
+// ---------------------------------------------------------------------------
 
 function parseEtherscanSourceCode(raw: string): Record<string, string> {
     const trimmed = raw.trim();
