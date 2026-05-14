@@ -42,20 +42,21 @@ my-dapp/
         └── Views/<Name>.elm                 # auto-generated UI (read/write/event forms)
 ```
 
-## Status (Phase 1)
+## Status (0.2.0)
 
 | Capability | Status |
 |---|---|
-| Sourcify fetch (any chain Sourcify supports) | ✅ |
+| Sourcify fetch (every chain Sourcify supports) | ✅ |
 | Etherscan-family fallback (mainnet, Sepolia, Base, Arbitrum, Optimism, Polygon, PulseChain Blockscout) | ✅ |
 | Solidity types: `address` `uint*` `int*` `bool` `string` `bytes` `bytesN` | ✅ |
-| Solidity types: `T[]` `T[N]` `tuple` (recursive) | ✅ (typed inputs); decoders fall back to raw hex for these — replace by hand for now |
-| `view` / `pure` reads with typed result panel | ✅ |
+| Solidity types: `T[]` `T[N]` `tuple` (recursive) | ✅ typed inputs; honest slot-aware decoders for scalar returns; dynamic returns fall back to raw hex (replace by fork) |
+| `view` / `pure` reads with typed result panel + slot-aware decoder | ✅ |
 | `nonpayable` / `payable` writes through `Tx.Status` state machine | ✅ |
-| Multi-contract output (e.g. factory + child) | ⏳ Phase 2 |
-| Events / log subscriptions | ⏳ Phase 2 |
-| Standard detection (ERC-20 → polished `Wallet`/`Balance` views instead of generic) | ⏳ Phase 3 |
-| Real keccak256 in port bridge (currently a stub — reads work, writes hang) | ⏳ blocker for production |
+| Multi-contract output (e.g. factory + child) — repeat `--address` | ✅ |
+| Standard detection (ERC-20 / 721 / 1155 / 4626) — visible in CLI output | ✅ classifier; polished-view swap is a follow-up |
+| Pure-Elm calldata encoding — zero JS runtime deps | ✅ (uses `Web3.Abi.Calldata` 1.2.0+) |
+| Events / log subscriptions | ⏳ follow-up — generic auto-view does not yet ship event renderers |
+| Polished-view swap when standard is detected (uses `Web3.Ui.Wallet` / `Balance` / etc.) | ⏳ follow-up — generic auto-views ship today |
 
 ## Supported chains
 

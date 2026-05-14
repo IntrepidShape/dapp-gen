@@ -1,7 +1,33 @@
 {
     "name": "@intrepidshape/dapp-gen",
-    "version": "0.1.0",
-    "description": "Pull a verified contract from any EVM chain and generate a type-safe Elm dapp frontend.",
+    "version": "0.2.0",
+    "description": "Pull a verified contract from any EVM chain and generate a type-safe Elm dapp frontend — zero JS runtime deps, pure-Elm ABI encoding.",
+    "keywords": [
+        "ethereum",
+        "evm",
+        "dapp",
+        "elm",
+        "codegen",
+        "abi",
+        "web3",
+        "typescript",
+        "scaffold"
+    ],
+    "homepage": "https://github.com/IntrepidShape/dapp-gen",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/IntrepidShape/dapp-gen.git"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "files": [
+        "src/**/*.ts",
+        "templates/**/*",
+        "README.md",
+        "RELEASE.md",
+        "tsconfig.json"
+    ],
     "license": "MIT",
     "type": "module",
     "bin": {
@@ -13,6 +39,7 @@
     },
     "devDependencies": {
         "@types/bun": "latest",
-        "typescript": "^5.0.0"
+        "typescript": "^5.0.0",
+        "viem": "^2.48.11"
     }
 }

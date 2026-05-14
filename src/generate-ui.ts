@@ -19,6 +19,7 @@
  * Output is plain Elm a human could have written. Users fork and customise.
  */
 
+import { toFunctionSelector } from "viem";
 import type { AbiItem, AbiParam, VerifiedBundle } from "./fetch.ts";
 
 export interface GenerateOptions {
@@ -47,6 +48,7 @@ export function generateUiModule(
         renderFieldDefs(fns),
         renderReadViews(reads),
         renderWriteViews(writes),
+        renderResultParsers(reads, fns),
     ].join("\n\n\n");
 }
 
@@ -156,9 +158,9 @@ function renderImports(): string {
 import Html.Attributes as Attr
 import Json.Decode as D
 import Json.Encode as E
+import Web3.Abi.Calldata as Calldata
 import Web3.Abi.Decode as AbiDecode
-import Web3.Abi.Encode as AbiEncode
-import Web3.BigInt as BigInt exposing (BigInt)
+import Web3.BigInt as BigInt
 import Web3.Contract.Call as Call
 import Web3.Contract.Send as Send
 import Web3.Transaction as Tx
@@ -345,31 +347,32 @@ update _ Noop model =
             const argName = ensureParamName(p, i);
             return `                Result.andThen
                     (\\xs ->
-                        AbiInput.parse ${fieldDefName(key, argName)} model.${camel(key)}_${argName}
+                        AbiInput.parseSlot ${fieldDefName(key, argName)} model.${camel(key)}_${argName}
                             |> Result.map (\\x -> xs ++ [ x ])
                     )`;
         });
 
-        const parseArgsExpr =
+        const parseSlotsExpr =
             inputs.length === 0
                 ? `(Ok [])`
                 : [`(Ok [])`, ...argParseLines].join("\n                    |> ");
 
+        // Selector is computed at codegen time via viem — never shipped.
+        const selector = toFunctionSelector(methodSig).slice(2);
+
         if (isRead(fn)) {
-            const outDecoder = renderOutputDecoder(fn);
             branches.push(
                 [
                     `        ${ctor}Read ->`,
-                    `            case ${parseArgsExpr} of`,
-                    `                Ok args ->`,
+                    `            case ${parseSlotsExpr} of`,
+                    `                Ok slots ->`,
                     `                    ( { model | ${camel(key)}_status = Read.Pending }`,
                     `                    , DoCall`,
                     `                        (Call.encode`,
-                    `                            (Call.readCall`,
+                    `                            (Call.readCallRaw`,
                     `                                { contract = contract`,
-                    `                                , method = "${methodSig}"`,
-                    `                                , args = args`,
-                    `                                , decoder = ${outDecoder}`,
+                    `                                , data = Calldata.calldata "${selector}" slots`,
+                    `                                , decoder = D.succeed ""`,
                     `                                , id = "${callId(key)}"`,
                     `                                }`,
                     `                            )`,
@@ -402,19 +405,17 @@ update _ Noop model =
 
             const sendCall = isPayable(fn)
                 ? [
-                      `                            (Send.payableCall`,
+                      `                            (Send.payableCallRaw`,
                       `                                { contract = contract`,
-                      `                                , method = "${methodSig}"`,
-                      `                                , args = args`,
+                      `                                , data = Calldata.calldata "${selector}" slots`,
                       `                                , value = BigInt.fromString model.${camel(key)}_value |> Maybe.withDefault BigInt.zero`,
                       `                                }`,
                       `                            )`,
                   ].join("\n")
                 : [
-                      `                            (Send.writeCall`,
+                      `                            (Send.writeCallRaw`,
                       `                                { contract = contract`,
-                      `                                , method = "${methodSig}"`,
-                      `                                , args = args`,
+                      `                                , data = Calldata.calldata "${selector}" slots`,
                       `                                }`,
                       `                            )`,
                   ].join("\n");
@@ -422,8 +423,8 @@ update _ Noop model =
             branches.push(
                 [
                     `        ${ctor}Send ->`,
-                    `            case ${parseArgsExpr} of`,
-                    `                Ok args ->`,
+                    `            case ${parseSlotsExpr} of`,
+                    `                Ok slots ->`,
                     `                    ( { model | ${camel(key)}_tx = Tx.AwaitingSignature }`,
                     `                    , DoSend`,
                     `                        (Send.encode`,
@@ -482,12 +483,12 @@ decodePortMsg _ =
             const ctor = pascal(key);
             return [
                 `        "${callId(key)}" ->`,
-                `            D.field "result" D.string`,
-                `                |> D.map (\\s -> Just (${ctor}Result (Ok s)))`,
-                `                |> orElseField`,
-                `                    (D.field "error" D.string`,
-                `                        |> D.map (\\e -> Just (${ctor}Result (Err e)))`,
-                `                    )`,
+                `            D.oneOf`,
+                `                [ D.field "result" D.string`,
+                `                    |> D.map (\\hex -> Just (${ctor}Result (${resultParserName(key)} hex)))`,
+                `                , D.field "error" D.string`,
+                `                    |> D.map (\\e -> Just (${ctor}Result (Err e)))`,
+                `                ]`,
             ].join("\n");
         })
         .join("\n\n");
@@ -519,11 +520,6 @@ decodePortMsg _ =
         ``,
         `        _ ->`,
         `            D.succeed Nothing`,
-        ``,
-        ``,
-        `orElseField : D.Decoder a -> D.Decoder a -> D.Decoder a`,
-        `orElseField fallback primary =`,
-        `    D.oneOf [ primary, fallback ]`,
     ].join("\n");
 }
 
@@ -747,46 +743,123 @@ ${payableBody}
 // Output decoders
 // ---------------------------------------------------------------------------
 
-/**
- * Render a `D.Decoder String` that decodes the ABI return value as a
- * human-readable string. For multi-output functions we render a JSON-ish
- * concatenation. The Tier-1 ContractRead displays this string as-is in its
- * Success state; users are expected to swap in their own pretty-printer once
- * they fork the generated code.
- */
-function renderOutputDecoder(fn: AbiItem): string {
-    const outs = fn.outputs ?? [];
-    if (outs.length === 0) {
-        return `D.succeed "()"`;
-    }
-    if (outs.length === 1) {
-        return scalarOutputDecoder(outs[0]!);
-    }
-    // Multi-output: render each then join with " | "
-    return `D.map (\\xs -> "(" ++ String.join ", " xs ++ ")") (D.list D.string)`;
+function resultParserName(key: string): string {
+    return `${camel(key)}_resultParser`;
 }
 
-function scalarOutputDecoder(p: AbiParam): string {
-    if (p.type === "address") {
-        return `D.map T.addressToString AbiDecode.address`;
+/**
+ * Emit per-function result parsers. Each one has type
+ * `String -> Result String String` — takes the raw `eth_call` result hex and
+ * returns the pretty-printed value (or a typed error).
+ *
+ * Slot extraction uses `Web3.Abi.Decode.{uint256,address,bool,…}Slot`, which
+ * understand the canonical 32-byte ABI layout: scalars right-aligned (or
+ * left-aligned for `bytesN`), arrays/strings as `offset, length, data`.
+ */
+function renderResultParsers(reads: AbiItem[], all: AbiItem[]): string {
+    if (reads.length === 0) return `-- (no read result parsers)`;
+    const blocks = reads.map((fn) => {
+        const idx = all.indexOf(fn);
+        const key = functionKey(fn, idx, all);
+        const body = parserBody(fn);
+        return `${resultParserName(key)} : String -> Result String String
+${resultParserName(key)} hex =
+${body}`;
+    });
+    const helper = `combineResults : List (Result String String) -> Result String (List String)
+combineResults xs =
+    List.foldr
+        (\\r acc ->
+            case ( r, acc ) of
+                ( Err e, _ ) -> Err e
+                ( _, Err e ) -> Err e
+                ( Ok v, Ok rest ) -> Ok (v :: rest)
+        )
+        (Ok [])
+        xs`;
+    return `-- RESULT PARSERS ------------------------------------------------------------\n\n\n${helper}\n\n\n${blocks.join("\n\n\n")}`;
+}
+
+function parserBody(fn: AbiItem): string {
+    const outs = fn.outputs ?? [];
+    if (outs.length === 0) {
+        return `    Ok "()"`;
     }
-    if (p.type === "bool") {
-        return `D.map (\\b -> if b then "true" else "false") AbiDecode.bool`;
+    if (outs.length === 1) {
+        return scalarParserBody(outs[0]!, 0);
     }
-    if (p.type === "string") {
-        return `AbiDecode.string`;
+    // Multi-output: each slot picked at its index, then joined.
+    const lines: string[] = [`    let`];
+    outs.forEach((p, i) => {
+        const name = ensureParamName(p, i);
+        lines.push(`        ${name}Res =`);
+        lines.push(scalarParserBody(p, i).replace(/^ {4}/gm, "            "));
+    });
+    lines.push(`    in`);
+    // Combine into "(a, b, c)" string. If any fails, return first error.
+    const refs = outs.map((p, i) => `${ensureParamName(p, i)}Res`);
+    lines.push(`    case combineResults [ ${refs.join(", ")} ] of`);
+    lines.push(`        Ok parts -> Ok ("(" ++ String.join ", " parts ++ ")")`);
+    lines.push(`        Err e -> Err e`);
+    return lines.join("\n");
+}
+
+/**
+ * Render the parser-body for a single scalar at slot index `slot`.
+ * Result type: `Result String String`. Indentation is 4 spaces (the body is
+ * always wrapped under `<name> hex =\n`).
+ */
+function scalarParserBody(p: AbiParam, slot: number): string {
+    const t = p.type;
+    if (t === "address") {
+        return `    case AbiDecode.addressSlot ${slot} hex of
+        Just a -> Ok (T.addressToString a)
+        Nothing -> Err ("decode failed (address @ slot ${slot}): " ++ hex)`;
     }
-    if (p.type.startsWith("uint")) {
-        return `D.map BigInt.toString AbiDecode.uint256`;
+    if (t === "bool") {
+        return `    case AbiDecode.boolSlot ${slot} hex of
+        Just True -> Ok "true"
+        Just False -> Ok "false"
+        Nothing -> Err ("decode failed (bool @ slot ${slot}): " ++ hex)`;
     }
-    if (p.type.startsWith("int")) {
-        return `D.map BigInt.toString AbiDecode.int256`;
+    if (t.startsWith("uint")) {
+        return `    case AbiDecode.uint256Slot ${slot} hex of
+        Just n -> Ok (BigInt.toString n)
+        Nothing -> Err ("decode failed (uint @ slot ${slot}): " ++ hex)`;
     }
-    if (p.type === "bytes32") {
-        return `AbiDecode.bytes32`;
+    if (t.startsWith("int")) {
+        // int256 — treat as uint for display (two's-complement rendering is a
+        // user-fork concern).
+        return `    case AbiDecode.uint256Slot ${slot} hex of
+        Just n -> Ok (BigInt.toString n)
+        Nothing -> Err ("decode failed (int @ slot ${slot}): " ++ hex)`;
     }
-    // dynamic bytes / arrays / tuples — Phase 1 returns raw hex string the
-    // port handler put in `result`. The user can swap in a richer decoder
-    // when they fork the generated module.
-    return `D.string`;
+    if (t === "bytes32") {
+        return `    Ok ("0x" ++ AbiDecode.hexSlot ${slot} hex)`;
+    }
+    if (/^bytes\d+$/.test(t)) {
+        // bytesN — right-aligned within slot.
+        const n = parseInt(t.slice(5), 10);
+        return `    Ok ("0x" ++ String.left ${n * 2} (AbiDecode.hexSlot ${slot} hex))`;
+    }
+    if (t === "string") {
+        return `    case AbiDecode.stringSlot ${slot} hex of
+        Just s -> Ok s
+        Nothing -> Err ("decode failed (string @ slot ${slot}): " ++ hex)`;
+    }
+    if (t === "bytes") {
+        // Dynamic bytes — show as 0x-prefixed hex with length-prefix stripped.
+        return `    Ok ("0x" ++ AbiDecode.hexSlot ${slot + 1} hex)`;
+    }
+    if (t.endsWith("[]")) {
+        // Dynamic array — slot is an offset, then length, then elements.
+        // Phase 2A: render as the raw hex with a label noting offset. Phase 3
+        // recurses into the element type with proper offset arithmetic.
+        return `    Ok ("[…] (raw at slot ${slot}; see AbiDecode for typed access)")`;
+    }
+    if (t.startsWith("tuple")) {
+        return `    Ok ("(tuple at slot ${slot}; see AbiDecode for typed access)")`;
+    }
+    // Unknown — fall back to raw slot hex.
+    return `    Ok ("0x" ++ AbiDecode.hexSlot ${slot} hex)`;
 }

@@ -1,142 +1,225 @@
 /**
- * Minimal Web3 port bridge for the generated dapp.
+ * Web3 port bridge — pure pass-through.
  *
- * Maps Elm `web3Cmd` payloads to the right `window.ethereum` call (eth_call,
- * eth_sendTransaction, wallet_connect, etc.) and re-emits results into
- * `web3Sub` keyed by the call's `id` field. Generated UI modules expect this
- * exact shape.
+ * Translates Elm `web3Cmd` payloads to `window.ethereum` RPC calls and pipes
+ * results back through `web3Sub`. This file is the *entirety* of the JS
+ * surface area for a dapp built with `intrepidshape/elm-web3` 1.2+ — all
+ * calldata encoding happens in Elm. **No npm runtime dependencies.** No
+ * keccak. No ABI encoder. The Elm side ships the wire-ready hex; we forward
+ * it.
  *
- * This is your code — fork freely. For a production-grade bridge (EIP-6963
- * wallet discovery, multi-wallet support, watchAsset, addChain, etc.) see
- * `intrepidshape/elm-web3/js/elm-web3-ports.js`.
+ * This file is your code — fork it. Re-running `dapp-gen` does not overwrite
+ * it unless you pass `--force`.
  */
+
+export {};
+
+// ─── Types shared with the Elm side (wire contract) ─────────────────────────
+
+type HexString = `0x${string}`;
+
+/**
+ * Messages sent FROM Elm TO this bridge. The shape mirrors
+ * `Web3.Contract.Call.encode` / `Web3.Contract.Send.encode` /
+ * `Web3.Wallet.encode` on the Elm side.
+ */
+type Outgoing =
+    | { readonly tag: "call"; readonly id: string; readonly contract: HexString; readonly data: HexString; readonly block?: unknown; readonly from?: HexString }
+    | { readonly tag: "send"; readonly id?: string; readonly contract: HexString; readonly data: HexString; readonly value?: string; readonly gasLimit?: number }
+    | { readonly tag: "walletConnect" }
+    | { readonly tag: "walletDisconnect" }
+    | { readonly tag: "walletSwitchChain"; readonly chainId: number };
+
+/**
+ * Messages sent FROM this bridge TO Elm. The shape matches what
+ * `Web3.Contract.Call.responseDecoder` / `Web3.Wallet.decoder` /
+ * `Web3.Transaction.decoder` consume.
+ */
+type Incoming =
+    | { readonly tag: "callResult"; readonly id: string; readonly result: HexString }
+    | { readonly tag: "txSubmitted"; readonly id?: string; readonly hash: HexString }
+    | { readonly tag: "txConfirmed"; readonly id?: string; readonly receipt: unknown }
+    | { readonly tag: "txReceiptNotFound"; readonly id?: string }
+    | { readonly tag: "txRejected"; readonly id?: string }
+    | { readonly tag: "walletConnected"; readonly address: HexString; readonly chainId: number }
+    | { readonly tag: "walletDisconnected" }
+    | { readonly tag: "switchChainOk"; readonly chainId: number }
+    | { readonly tag: "error"; readonly id?: string | undefined; readonly error: string };
+
+// ─── window.Elm + window.ethereum typings ───────────────────────────────────
+
+interface EthereumProvider {
+    readonly isMetaMask?: boolean;
+    request(args: { method: string; params?: readonly unknown[] }): Promise<unknown>;
+    on(event: string, handler: (payload: unknown) => void): void;
+}
+
+interface ElmApp {
+    readonly ports: {
+        readonly web3Cmd: { subscribe(handler: (value: unknown) => void): void };
+        readonly web3Sub: { send(value: Incoming): void };
+    };
+}
 
 declare global {
     interface Window {
-        Elm: {
-            Main: {
-                init: (opts: { node: HTMLElement }) => {
-                    ports: {
-                        web3Cmd: { subscribe: (handler: (v: unknown) => void) => void };
-                        web3Sub: { send: (v: unknown) => void };
-                    };
-                };
-            };
+        readonly Elm: {
+            readonly Main: { init(opts: { node: HTMLElement }): ElmApp };
         };
-        ethereum?: EthereumProvider;
+        readonly ethereum?: EthereumProvider;
     }
 }
 
-interface EthereumProvider {
-    isMetaMask?: boolean;
-    request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-    on: (event: string, handler: (...args: unknown[]) => void) => void;
-}
+// ─── Boot ───────────────────────────────────────────────────────────────────
 
 const node = document.getElementById("app");
-if (!node) throw new Error("missing #app node in index.html");
+if (!node) throw new Error("[dapp] missing #app element in index.html");
 
 const app = window.Elm.Main.init({ node });
 
-interface OutgoingCall {
-    tag: "call" | "send" | "walletConnect" | "walletDisconnect" | "walletSwitchChain";
-    id?: string;
-    contract?: string;
-    method?: string;
-    args?: unknown[];
-    value?: string;
-    chainId?: number;
-}
+app.ports.web3Cmd.subscribe((raw: unknown) => {
+    void handleOutgoing(raw as Outgoing);
+});
 
-app.ports.web3Cmd.subscribe(async (raw) => {
-    const cmd = raw as OutgoingCall;
+// Wallet account/chain changes — re-emit so the Elm wallet state machine
+// stays consistent without polling.
+window.ethereum?.on("accountsChanged", (accounts: unknown) => {
+    const list = accounts as readonly HexString[];
+    if (list.length === 0) {
+        app.ports.web3Sub.send({ tag: "walletDisconnected" });
+    }
+});
+window.ethereum?.on("chainChanged", (chainHex: unknown) => {
+    const chainId = parseInt(chainHex as string, 16);
+    app.ports.web3Sub.send({ tag: "switchChainOk", chainId });
+});
+
+// ─── Dispatch ───────────────────────────────────────────────────────────────
+
+async function handleOutgoing(cmd: Outgoing): Promise<void> {
     const eth = window.ethereum;
     if (!eth) {
-        app.ports.web3Sub.send({ tag: "error", id: cmd.id, error: "no wallet detected" });
+        app.ports.web3Sub.send({
+            tag: "error",
+            id: idOf(cmd),
+            error: "no wallet detected — install MetaMask or another EIP-1193 wallet",
+        });
         return;
     }
     try {
         switch (cmd.tag) {
-            case "walletConnect": {
-                const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
-                const chainHex = (await eth.request({ method: "eth_chainId" })) as string;
-                app.ports.web3Sub.send({
-                    tag: "walletConnected",
-                    address: accounts[0],
-                    chainId: parseInt(chainHex, 16),
-                });
-                break;
-            }
+            case "walletConnect":
+                await handleConnect(eth);
+                return;
             case "walletDisconnect":
                 app.ports.web3Sub.send({ tag: "walletDisconnected" });
-                break;
-            case "walletSwitchChain": {
-                const target = "0x" + (cmd.chainId ?? 0).toString(16);
-                await eth.request({
-                    method: "wallet_switchEthereumChain",
-                    params: [{ chainId: target }],
-                });
-                app.ports.web3Sub.send({ tag: "switchChainOk", chainId: cmd.chainId });
-                break;
-            }
-            case "call": {
-                const result = await eth.request({
-                    method: "eth_call",
-                    params: [
-                        {
-                            to: cmd.contract,
-                            data: encodeCallData(cmd.method ?? "", cmd.args ?? []),
-                        },
-                        "latest",
-                    ],
-                });
-                app.ports.web3Sub.send({ tag: "callResult", id: cmd.id, result });
-                break;
-            }
-            case "send": {
-                const from = ((await eth.request({ method: "eth_accounts" })) as string[])[0];
-                const hash = (await eth.request({
-                    method: "eth_sendTransaction",
-                    params: [
-                        {
-                            from,
-                            to: cmd.contract,
-                            data: encodeCallData(cmd.method ?? "", cmd.args ?? []),
-                            value:
-                                cmd.value && cmd.value !== "0"
-                                    ? "0x" + BigInt(cmd.value).toString(16)
-                                    : undefined,
-                        },
-                    ],
-                })) as string;
-                app.ports.web3Sub.send({ tag: "txSubmitted", id: cmd.id, hash });
-                pollReceipt(eth, hash, cmd.id);
-                break;
-            }
-            default:
-                console.warn("unhandled port cmd", cmd);
+                return;
+            case "walletSwitchChain":
+                await handleSwitchChain(eth, cmd.chainId);
+                return;
+            case "call":
+                await handleCall(eth, cmd);
+                return;
+            case "send":
+                await handleSend(eth, cmd);
+                return;
         }
     } catch (e) {
         const err = e as { code?: number; message?: string };
         if (err.code === 4001) {
-            app.ports.web3Sub.send({ tag: "txRejected", id: cmd.id });
-        } else {
-            app.ports.web3Sub.send({
-                tag: "error",
-                id: cmd.id,
-                error: err.message ?? String(e),
-            });
+            app.ports.web3Sub.send({ tag: "txRejected", id: idOf(cmd) });
+            return;
         }
+        app.ports.web3Sub.send({
+            tag: "error",
+            id: idOf(cmd),
+            error: err.message ?? String(e),
+        });
     }
-});
+}
+
+function idOf(cmd: Outgoing): string | undefined {
+    return "id" in cmd ? cmd.id : undefined;
+}
+
+// ─── Wallet ─────────────────────────────────────────────────────────────────
+
+async function handleConnect(eth: EthereumProvider): Promise<void> {
+    const accounts = (await eth.request({
+        method: "eth_requestAccounts",
+    })) as readonly HexString[];
+    const chainHex = (await eth.request({ method: "eth_chainId" })) as string;
+    const address = accounts[0];
+    if (!address) throw new Error("wallet returned no accounts");
+    app.ports.web3Sub.send({
+        tag: "walletConnected",
+        address,
+        chainId: parseInt(chainHex, 16),
+    });
+}
+
+async function handleSwitchChain(eth: EthereumProvider, chainId: number): Promise<void> {
+    const target = `0x${chainId.toString(16)}` as const;
+    await eth.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: target }],
+    });
+    app.ports.web3Sub.send({ tag: "switchChainOk", chainId });
+}
+
+// ─── Read / Write — pass-through ────────────────────────────────────────────
+
+async function handleCall(
+    eth: EthereumProvider,
+    cmd: Extract<Outgoing, { tag: "call" }>,
+): Promise<void> {
+    const params: Record<string, unknown> = { to: cmd.contract, data: cmd.data };
+    if (cmd.from) params["from"] = cmd.from;
+    const result = (await eth.request({
+        method: "eth_call",
+        params: [params, "latest"],
+    })) as HexString;
+    app.ports.web3Sub.send({ tag: "callResult", id: cmd.id, result });
+}
+
+async function handleSend(
+    eth: EthereumProvider,
+    cmd: Extract<Outgoing, { tag: "send" }>,
+): Promise<void> {
+    const accounts = (await eth.request({
+        method: "eth_accounts",
+    })) as readonly HexString[];
+    const from = accounts[0];
+    if (!from) throw new Error("wallet not connected");
+
+    const params: Record<string, unknown> = {
+        from,
+        to: cmd.contract,
+        data: cmd.data,
+    };
+    if (cmd.value && cmd.value !== "0") {
+        params["value"] = `0x${BigInt(cmd.value).toString(16)}`;
+    }
+    if (typeof cmd.gasLimit === "number") {
+        params["gas"] = `0x${cmd.gasLimit.toString(16)}`;
+    }
+
+    const hash = (await eth.request({
+        method: "eth_sendTransaction",
+        params: [params],
+    })) as HexString;
+
+    app.ports.web3Sub.send({ tag: "txSubmitted", id: cmd.id, hash });
+    void pollReceipt(eth, hash, cmd.id);
+}
 
 async function pollReceipt(
     eth: EthereumProvider,
-    hash: string,
+    hash: HexString,
     id: string | undefined,
 ): Promise<void> {
-    for (let i = 0; i < 120; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
+    for (let attempt = 0; attempt < 120; attempt++) {
+        await sleep(2000);
         try {
             const r = await eth.request({
                 method: "eth_getTransactionReceipt",
@@ -147,46 +230,12 @@ async function pollReceipt(
                 return;
             }
         } catch {
-            // ignore intermittent
+            // transient — keep polling
         }
     }
     app.ports.web3Sub.send({ tag: "txReceiptNotFound", id });
 }
 
-/**
- * Minimal calldata encoder — Elm has already encoded args to hex via
- * `Web3.Abi.Encode` and shipped them in `cmd.args`. We just pack the
- * 4-byte selector + concatenated args. This handles the common ERC-20
- * shape; for tuples / arrays the Elm side emits already-padded slots.
- */
-function encodeCallData(methodSig: string, args: unknown[]): string {
-    const selector = methodSelector(methodSig);
-    const tail = args
-        .map((a) => (typeof a === "string" ? stripHex(a) : ""))
-        .map(padSlot)
-        .join("");
-    return "0x" + selector + tail;
-}
-
-function methodSelector(sig: string): string {
-    // keccak256 of the signature, first 4 bytes. We delegate to the wallet's
-    // built-in by computing client-side via a tiny embedded keccak. For Phase 1
-    // we ship a no-op stub — the generated dapp will rely on either the JS
-    // bridge having a keccak helper, or on the Elm side providing pre-encoded
-    // selectors. Replace this with a real keccak (e.g. via `@noble/hashes`)
-    // when forking.
-    return keccak4(sig);
-}
-
-function keccak4(_sig: string): string {
-    // Placeholder. Drop in a keccak256 implementation here.
-    return "00000000";
-}
-
-function stripHex(s: string): string {
-    return s.startsWith("0x") ? s.slice(2) : s;
-}
-
-function padSlot(hex: string): string {
-    return hex.length >= 64 ? hex : hex.padStart(64, "0");
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
