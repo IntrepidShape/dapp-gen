@@ -1,0 +1,137 @@
+/* Generated dapp baseline styles — replace freely.
+   The semantic class names come from `intrepidshape/elm-web3-ui`. */
+
+:root {
+    --bg: #0e0e10;
+    --surface: #18181b;
+    --ink: #ffffff;
+    --muted: #a1a1aa;
+    --accent: #84cc16;
+    --danger: #ef4444;
+    --border: rgba(255, 255, 255, 0.08);
+    --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+    font-size: 14px;
+    line-height: 1.45;
+}
+.app { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+.app__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 16px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+}
+.app__title { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.app__address { color: var(--muted); font-size: 12px; }
+
+.generated-view__section {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+}
+
+.web3-contract-read,
+.web3-contract-write {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+}
+.web3-contract-read__header,
+.web3-contract-write__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+}
+.web3-contract-read__name,
+.web3-contract-write__name { font-weight: 700; }
+.web3-contract-read__return-type,
+.web3-contract-write__mutability {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.web3-contract-read__args,
+.web3-contract-write__args {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.web3-abi-input { display: grid; gap: 4px; }
+.web3-abi-input__label { font-size: 12px; color: var(--muted); }
+.web3-abi-input__type { color: var(--muted); opacity: 0.6; }
+.web3-abi-input__error { color: var(--danger); font-size: 11px; }
+.web3-input-address,
+.web3-input-bigint,
+.web3-input-bytes,
+.web3-input-text {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    padding: 8px 10px;
+    border-radius: 4px;
+    font: inherit;
+    width: 100%;
+}
+.web3-input-address--invalid,
+.web3-input-bigint--invalid,
+.web3-input-bytes--invalid { border-color: var(--danger); }
+
+.web3-contract-read__button,
+.web3-action-btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 8px 14px;
+    border-radius: 4px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+.web3-contract-read__button:disabled,
+.web3-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.web3-contract-read__result,
+.web3-contract-write__error {
+    margin-top: 12px;
+    padding: 8px 10px;
+    background: var(--bg);
+    border-radius: 4px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+.web3-contract-read__result--failed,
+.web3-contract-write__error { color: var(--danger); }
+
+.web3-tx-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: var(--border);
+}
+.web3-tx-badge--confirmed { background: var(--accent); color: var(--bg); }
+.web3-tx-badge--failed,
+.web3-tx-badge--rejected { background: var(--danger); }
+
+.web3-wallet,
+.web3-wallet-state {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}

@@ -1,0 +1,18 @@
+{
+    "name": "@intrepidshape/dapp-gen",
+    "version": "0.1.0",
+    "description": "Pull a verified contract from any EVM chain and generate a type-safe Elm dapp frontend.",
+    "license": "MIT",
+    "type": "module",
+    "bin": {
+        "dapp-gen": "./src/cli.ts"
+    },
+    "scripts": {
+        "dapp-gen": "bun src/cli.ts",
+        "test": "bun test"
+    },
+    "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.0.0"
+    }
+}
